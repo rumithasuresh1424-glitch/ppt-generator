@@ -30,6 +30,14 @@ export interface MatchedRow extends Record<string, unknown> {
   _photoKey: string | null;
 }
 
+export interface GenerateResponse {
+  success: boolean;
+  fileName: string;
+  downloadUrl: string;
+  totalSlides: number;
+  error?: string;
+}
+
 export async function uploadExcel(file: File): Promise<ExcelData> {
   const formData = new FormData();
   formData.append('file', file);
@@ -65,6 +73,18 @@ export async function matchPhotos(
     excelData,
     matchColumn,
     imageNames,
+  });
+
+  return response.data;
+}
+
+export async function generatePPT(
+  excelData: MatchedRow[],
+  columns: string[]
+): Promise<GenerateResponse> {
+  const response = await axios.post<GenerateResponse>('/api/ppt/generate', {
+    excelData,
+    columns,
   });
 
   return response.data;

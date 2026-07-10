@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { Upload, Search, X, FileSpreadsheet, Archive, CheckCircle, XCircle } from 'lucide-react';
-import { uploadExcel, uploadPhotos, matchPhotos, ExcelData, MatchedRow, PhotoUploadResponse } from '../services/api';
+import { Upload, Search, X, FileSpreadsheet, Archive, CheckCircle, XCircle, Loader2, Download } from 'lucide-react';
+import { uploadExcel, uploadPhotos, matchPhotos, generatePPT, ExcelData, MatchedRow, PhotoUploadResponse } from '../services/api';
 import PreviewTable from '../components/PreviewTable';
 
 export default function GeneratePPT() {
@@ -13,7 +13,10 @@ export default function GeneratePPT() {
   const [isDraggingZip, setIsDraggingZip] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isMatching, setIsMatching] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [generateSuccess, setGenerateSuccess] = useState(false);
+  const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedColumn, setSelectedColumn] = useState<string>('');
   const excelInputRef = useRef<HTMLInputElement>(null);
@@ -24,6 +27,8 @@ export default function GeneratePPT() {
     const performMatch = async () => {
       if (excelData && zipFile && photoData && selectedColumn) {
         setIsMatching(true);
+        setGenerateSuccess(false);
+        setDownloadUrl(null);
         try {
           const result = await matchPhotos(excelData.data, selectedColumn, photoData.imageNames);
           if (result.success) {
@@ -67,6 +72,8 @@ export default function GeneratePPT() {
     setPhotoData(null);
     setMatchedData([]);
     setSelectedColumn('');
+    setGenerateSuccess(false);
+    setDownloadUrl(null);
 
     setExcelFile(file);
     setError(null);
@@ -107,6 +114,8 @@ export default function GeneratePPT() {
     setZipFile(file);
     setError(null);
     setIsUploading(true);
+    setGenerateSuccess(false);
+    setDownloadUrl(null);
 
     try {
       const data = await uploadPhotos(file);
@@ -168,6 +177,8 @@ export default function GeneratePPT() {
     setError(null);
     setSearchQuery('');
     setSelectedColumn('');
+    setGenerateSuccess(false);
+    setDownloadUrl(null);
     if (excelInputRef.current) {
       excelInputRef.current.value = '';
     }
@@ -177,9 +188,42 @@ export default function GeneratePPT() {
     setZipFile(null);
     setPhotoData(null);
     setMatchedData([]);
+    setGenerateSuccess(false);
+    setDownloadUrl(null);
     if (zipInputRef.current) {
       zipInputRef.current.value = '';
     }
+  };
+
+  const handleGenerate = async () => {
+    if (!excelData || !matchedData.length || !selectedColumn) return;
+
+    setIsGenerating(true);
+    setError(null);
+
+    try {
+      const columns = excelData.columns;
+      const result = await generatePPT(matchedData, columns);
+
+      if (result.success) {
+        setGenerateSuccess(true);
+        setDownloadUrl(result.downloadUrl);
+        setError(null);
+      } else {
+        setError(result.error || 'Failed to generate PowerPoint');
+        setGenerateSuccess(false);
+      }
+    } catch (err) {
+      setError('Unable to generate PowerPoint. Please try again.');
+      setGenerateSuccess(false);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handleDownload = () => {
+    if (!downloadUrl) return;
+    window.open(downloadUrl, '_blank');
   };
 
   const canGenerate = excelData && zipFile && selectedColumn && matchedData.length > 0;
@@ -422,24 +466,50 @@ export default function GeneratePPT() {
           )}
 
           {/* Generate PowerPoint Button */}
-          <button
-            disabled={!canGenerate}
-            className={`w-full px-6 py-3 rounded-lg font-medium transition-colors ${
-              canGenerate
-                ? 'bg-primary text-primary-foreground hover:bg-primary/90 cursor-pointer'
-                : 'bg-muted text-muted-foreground opacity-50 cursor-not-allowed'
-            }`}
-          >
-            Generate PowerPoint
-          </button>
-          {!canGenerate && excelData && (
-            <p className="text-xs text-muted-foreground text-center -mt-4">
-              {!zipFile
-                ? 'Upload a ZIP file with photos'
-                : !selectedColumn
-                  ? 'Select a column to match photos'
-                  : 'Processing...'}
-            </p>
+          {!generateSuccess ? (
+            <>
+              <button
+                onClick={handleGenerate}
+                disabled={!canGenerate || isGenerating}
+                className={`w-full px-6 py-3 rounded-lg font-medium transition-colors flex items-center justify-center gap-2 ${
+                  canGenerate && !isGenerating
+                    ? 'bg-primary text-primary-foreground hover:bg-primary/90 cursor-pointer'
+                    : 'bg-muted text-muted-foreground opacity-50 cursor-not-allowed'
+                }`}
+              >
+                {isGenerating ? (
+                  <>
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                    Generating PowerPoint...
+                  </>
+                ) : (
+                  'Generate PowerPoint'
+                )}
+              </button>
+              {!canGenerate && excelData && (
+                <p className="text-xs text-muted-foreground text-center -mt-4">
+                  {!zipFile
+                    ? 'Upload a ZIP file with photos'
+                    : !selectedColumn
+                      ? 'Select a column to match photos'
+                      : 'Processing...'}
+                </p>
+              )}
+            </>
+          ) : (
+            <div className="space-y-4">
+              <div className="flex items-center justify-center gap-2 p-4 bg-green-50 rounded-lg border border-green-200">
+                <CheckCircle className="h-6 w-6 text-green-600" />
+                <span className="text-green-700 font-medium">PowerPoint Generated Successfully!</span>
+              </div>
+              <button
+                onClick={handleDownload}
+                className="w-full px-6 py-3 rounded-lg font-medium transition-colors bg-green-600 text-white hover:bg-green-700 cursor-pointer flex items-center justify-center gap-2"
+              >
+                <Download className="h-5 w-5" />
+                Download PowerPoint
+              </button>
+            </div>
           )}
         </div>
       </div>
