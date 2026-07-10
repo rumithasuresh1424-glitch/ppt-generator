@@ -10,6 +10,26 @@ export interface ExcelData {
   error?: string;
 }
 
+export interface PhotoUploadResponse {
+  success: boolean;
+  totalImages: number;
+  imageNames: string[];
+  error?: string;
+}
+
+export interface MatchResponse {
+  success: boolean;
+  matched: number;
+  unmatched: number;
+  data: MatchedRow[];
+  error?: string;
+}
+
+export interface MatchedRow extends Record<string, unknown> {
+  _photoMatched: boolean;
+  _photoKey: string | null;
+}
+
 export async function uploadExcel(file: File): Promise<ExcelData> {
   const formData = new FormData();
   formData.append('file', file);
@@ -18,6 +38,33 @@ export async function uploadExcel(file: File): Promise<ExcelData> {
     headers: {
       'Content-Type': 'multipart/form-data',
     },
+  });
+
+  return response.data;
+}
+
+export async function uploadPhotos(file: File): Promise<PhotoUploadResponse> {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const response = await axios.post<PhotoUploadResponse>('/api/photos/upload', formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  });
+
+  return response.data;
+}
+
+export async function matchPhotos(
+  excelData: Record<string, unknown>[],
+  matchColumn: string,
+  imageNames: string[]
+): Promise<MatchResponse> {
+  const response = await axios.post<MatchResponse>('/api/photos/match', {
+    excelData,
+    matchColumn,
+    imageNames,
   });
 
   return response.data;

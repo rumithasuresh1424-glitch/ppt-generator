@@ -1,9 +1,10 @@
 import { useMemo, useState } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, User } from 'lucide-react';
+import { MatchedRow } from '../services/api';
 
 interface PreviewTableProps {
   columns: string[];
-  data: Record<string, unknown>[];
+  data: MatchedRow[];
   searchQuery: string;
 }
 
@@ -52,6 +53,9 @@ export default function PreviewTable({ columns, data, searchQuery }: PreviewTabl
               <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground border-b w-16">
                 #
               </th>
+              <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground border-b w-[80px]">
+                Photo
+              </th>
               {columns.map((col) => (
                 <th
                   key={col}
@@ -67,6 +71,17 @@ export default function PreviewTable({ columns, data, searchQuery }: PreviewTabl
               <tr key={startIndex + idx} className="hover:bg-muted/50">
                 <td className="px-4 py-3 text-sm text-muted-foreground border-b">
                   {startIndex + idx + 1}
+                </td>
+                <td className="px-4 py-3 text-sm border-b">
+                  {row._photoMatched ? (
+                    <div className="w-[60px] h-[60px] bg-muted rounded-md flex items-center justify-center overflow-hidden">
+                      <User className="h-6 w-6 text-muted-foreground" />
+                    </div>
+                  ) : (
+                    <div className="w-[60px] h-[60px] bg-muted rounded-md flex items-center justify-center text-xs text-muted-foreground">
+                      No Photo
+                    </div>
+                  )}
                 </td>
                 {columns.map((col) => (
                   <td key={col} className="px-4 py-3 text-sm border-b">
