@@ -469,7 +469,11 @@ export default function GeneratePPT() {
           {!generateSuccess ? (
             <>
               <button
-                onClick={handleGenerate}
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  handleGenerate();
+                }}
                 disabled={!canGenerate || isGenerating}
                 className={`w-full px-6 py-3 rounded-lg font-medium transition-colors flex items-center justify-center gap-2 ${
                   canGenerate && !isGenerating
@@ -503,7 +507,11 @@ export default function GeneratePPT() {
                 <span className="text-green-700 font-medium">PowerPoint Generated Successfully!</span>
               </div>
               <button
-                onClick={handleDownload}
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  handleDownload();
+                }}
                 className="w-full px-6 py-3 rounded-lg font-medium transition-colors bg-green-600 text-white hover:bg-green-700 cursor-pointer flex items-center justify-center gap-2"
               >
                 <Download className="h-5 w-5" />
