@@ -30,7 +30,12 @@ export default function GeneratePPT() {
         setGenerateSuccess(false);
         setDownloadUrl(null);
         try {
-          const result = await matchPhotos(excelData.data, selectedColumn, photoData.imageNames);
+          const result = await matchPhotos(
+            excelData.data,
+            selectedColumn,
+            photoData.imageNames,
+            photoData.imagePaths
+          );
           if (result.success) {
             setMatchedData(result.data);
             setError(null);

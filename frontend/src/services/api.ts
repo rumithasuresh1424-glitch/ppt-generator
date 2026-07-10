@@ -14,6 +14,7 @@ export interface PhotoUploadResponse {
   success: boolean;
   totalImages: number;
   imageNames: string[];
+  imagePaths: Record<string, string>;
   error?: string;
 }
 
@@ -28,6 +29,7 @@ export interface MatchResponse {
 export interface MatchedRow extends Record<string, unknown> {
   _photoMatched: boolean;
   _photoKey: string | null;
+  _photoPath: string | null;
 }
 
 export interface GenerateResponse {
@@ -67,12 +69,14 @@ export async function uploadPhotos(file: File): Promise<PhotoUploadResponse> {
 export async function matchPhotos(
   excelData: Record<string, unknown>[],
   matchColumn: string,
-  imageNames: string[]
+  imageNames: string[],
+  imagePaths: Record<string, string>
 ): Promise<MatchResponse> {
   const response = await axios.post<MatchResponse>('/api/photos/match', {
     excelData,
     matchColumn,
     imageNames,
+    imagePaths,
   });
 
   return response.data;

@@ -48,13 +48,13 @@ const app = (0, express_1.default)();
 const PORT = process.env.PORT || 5000;
 // Create directories if they don't exist
 const uploadsDir = path_1.default.join(__dirname, '..', 'uploads');
+const photosDir = path_1.default.join(uploadsDir, 'photos');
 const generatedDir = path_1.default.join(__dirname, '..', 'generated');
-if (!fs_1.default.existsSync(uploadsDir)) {
-    fs_1.default.mkdirSync(uploadsDir, { recursive: true });
-}
-if (!fs_1.default.existsSync(generatedDir)) {
-    fs_1.default.mkdirSync(generatedDir, { recursive: true });
-}
+[uploadsDir, photosDir, generatedDir].forEach((dir) => {
+    if (!fs_1.default.existsSync(dir)) {
+        fs_1.default.mkdirSync(dir, { recursive: true });
+    }
+});
 app.use((0, cors_1.default)());
 app.use(express_1.default.json({ limit: '50mb' }));
 // Serve static files from generated directory
@@ -129,7 +129,7 @@ app.post('/api/excel/upload', excelUpload.single('file'), (req, res) => {
         res.status(500).json({ success: false, error: 'Unable to parse Excel file' });
     }
 });
-// Photos upload endpoint
+// Photos upload endpoint - extracts and saves images to uploads/photos/
 app.post('/api/photos/upload', zipUpload.single('file'), (req, res) => {
     try {
         if (!req.file) {
@@ -138,9 +138,15 @@ app.post('/api/photos/upload', zipUpload.single('file'), (req, res) => {
         }
         const allowedExtensions = ['.jpg', '.jpeg', '.png', '.webp'];
         const zip = new adm_zip_1.default(req.file.buffer);
+        // Clear previous photos
+        if (fs_1.default.existsSync(photosDir)) {
+            fs_1.default.readdirSync(photosDir).forEach((file) => {
+                fs_1.default.unlinkSync(path_1.default.join(photosDir, file));
+            });
+        }
         const imageNames = [];
+        const imagePaths = {};
         const seenNames = new Set();
-        const imageBuffers = {};
         for (const entry of zip.getEntries()) {
             if (entry.isDirectory)
                 continue;
@@ -158,13 +164,18 @@ app.post('/api/photos/upload', zipUpload.single('file'), (req, res) => {
             }
             seenNames.add(key);
             imageNames.push(baseName);
-            imageBuffers[key] = { buffer: entry.getData(), ext };
+            // Save image to uploads/photos/
+            const imageFileName = `${baseName}${ext}`;
+            const imagePath = path_1.default.join(photosDir, imageFileName);
+            fs_1.default.writeFileSync(imagePath, entry.getData());
+            imagePaths[key] = imagePath;
         }
         imageNames.sort();
         res.json({
             success: true,
             totalImages: imageNames.length,
             imageNames,
+            imagePaths,
         });
     }
     catch (error) {
@@ -172,10 +183,10 @@ app.post('/api/photos/upload', zipUpload.single('file'), (req, res) => {
         res.status(500).json({ success: false, error: 'Unable to extract ZIP file or file is corrupted' });
     }
 });
-// Photo match endpoint
+// Photo match endpoint - now accepts imagePaths and returns them
 app.post('/api/photos/match', (req, res) => {
     try {
-        const { excelData, matchColumn, imageNames } = req.body;
+        const { excelData, matchColumn, imageNames, imagePaths } = req.body;
         if (!excelData || !Array.isArray(excelData)) {
             res.status(400).json({ success: false, error: 'Invalid Excel data' });
             return;
@@ -205,6 +216,7 @@ app.post('/api/photos/match', (req, res) => {
                 ...row,
                 _photoMatched: hasPhoto,
                 _photoKey: hasPhoto ? matchValue : null,
+                _photoPath: hasPhoto && imagePaths ? imagePaths[matchKey] : null,
             };
         });
         res.json({
@@ -251,31 +263,45 @@ app.post('/api/ppt/generate', async (req, res) => {
                 color: headerColor,
                 align: 'center',
             });
-            // Left side - Photo placeholder (2.2 x 2.8 inches)
-            const hasPhoto = row._photoMatched === true;
+            // Left side - Photo area (2.2 x 2.8 inches)
             const photoX = 0.5;
             const photoY = 1.2;
             const photoW = 2.2;
             const photoH = 2.8;
-            if (hasPhoto) {
-                // Add a placeholder box for the photo
-                slide.addShape(pptx.ShapeType.rect, {
-                    x: photoX,
-                    y: photoY,
-                    w: photoW,
-                    h: photoH,
-                    fill: { color: 'e2e8f0' },
-                    line: { color: 'cbd5e0', width: 1 },
-                });
-                slide.addText('[Photo]', {
-                    x: photoX,
-                    y: photoY + photoH / 2 - 0.3,
-                    w: photoW,
-                    h: 0.6,
-                    fontSize: 14,
-                    color: 'a0aec0',
-                    align: 'center',
-                });
+            const hasPhoto = row._photoMatched === true;
+            const photoPath = row._photoPath;
+            if (hasPhoto && photoPath && fs_1.default.existsSync(photoPath)) {
+                // Add actual photo using slide.addImage() with file path
+                try {
+                    slide.addImage({
+                        x: photoX,
+                        y: photoY,
+                        w: photoW,
+                        h: photoH,
+                        path: photoPath,
+                    });
+                }
+                catch (imgError) {
+                    // Fallback to placeholder if image fails to load
+                    console.error(`Failed to load image: ${photoPath}`, imgError);
+                    slide.addShape(pptx.ShapeType.rect, {
+                        x: photoX,
+                        y: photoY,
+                        w: photoW,
+                        h: photoH,
+                        fill: { color: 'f7fafc' },
+                        line: { color: 'e2e8f0', width: 1, dashType: 'dash' },
+                    });
+                    slide.addText('No Photo Available', {
+                        x: photoX,
+                        y: photoY + photoH / 2 - 0.3,
+                        w: photoW,
+                        h: 0.6,
+                        fontSize: 12,
+                        color: 'a0aec0',
+                        align: 'center',
+                    });
+                }
             }
             else {
                 // No photo available box

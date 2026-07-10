@@ -12,13 +12,14 @@ const PORT = process.env.PORT || 5000;
 
 // Create directories if they don't exist
 const uploadsDir = path.join(__dirname, '..', 'uploads');
+const photosDir = path.join(uploadsDir, 'photos');
 const generatedDir = path.join(__dirname, '..', 'generated');
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-}
-if (!fs.existsSync(generatedDir)) {
-  fs.mkdirSync(generatedDir, { recursive: true });
-}
+
+[uploadsDir, photosDir, generatedDir].forEach((dir) => {
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+});
 
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
@@ -102,7 +103,7 @@ app.post('/api/excel/upload', excelUpload.single('file'), (req, res) => {
   }
 });
 
-// Photos upload endpoint
+// Photos upload endpoint - extracts and saves images to uploads/photos/
 app.post('/api/photos/upload', zipUpload.single('file'), (req, res) => {
   try {
     if (!req.file) {
@@ -113,9 +114,16 @@ app.post('/api/photos/upload', zipUpload.single('file'), (req, res) => {
     const allowedExtensions = ['.jpg', '.jpeg', '.png', '.webp'];
     const zip = new AdmZip(req.file.buffer);
 
+    // Clear previous photos
+    if (fs.existsSync(photosDir)) {
+      fs.readdirSync(photosDir).forEach((file) => {
+        fs.unlinkSync(path.join(photosDir, file));
+      });
+    }
+
     const imageNames: string[] = [];
+    const imagePaths: Record<string, string> = {};
     const seenNames = new Set<string>();
-    const imageBuffers: Record<string, { buffer: Buffer; ext: string }> = {};
 
     for (const entry of zip.getEntries()) {
       if (entry.isDirectory) continue;
@@ -135,7 +143,12 @@ app.post('/api/photos/upload', zipUpload.single('file'), (req, res) => {
 
       seenNames.add(key);
       imageNames.push(baseName);
-      imageBuffers[key] = { buffer: entry.getData(), ext };
+
+      // Save image to uploads/photos/
+      const imageFileName = `${baseName}${ext}`;
+      const imagePath = path.join(photosDir, imageFileName);
+      fs.writeFileSync(imagePath, entry.getData());
+      imagePaths[key] = imagePath;
     }
 
     imageNames.sort();
@@ -144,6 +157,7 @@ app.post('/api/photos/upload', zipUpload.single('file'), (req, res) => {
       success: true,
       totalImages: imageNames.length,
       imageNames,
+      imagePaths,
     });
   } catch (error) {
     console.error('Error extracting ZIP file:', error);
@@ -151,13 +165,14 @@ app.post('/api/photos/upload', zipUpload.single('file'), (req, res) => {
   }
 });
 
-// Photo match endpoint
+// Photo match endpoint - now accepts imagePaths and returns them
 app.post('/api/photos/match', (req, res) => {
   try {
-    const { excelData, matchColumn, imageNames } = req.body as {
+    const { excelData, matchColumn, imageNames, imagePaths } = req.body as {
       excelData: Record<string, unknown>[];
       matchColumn: string;
       imageNames: string[];
+      imagePaths: Record<string, string>;
     };
 
     if (!excelData || !Array.isArray(excelData)) {
@@ -194,6 +209,7 @@ app.post('/api/photos/match', (req, res) => {
         ...row,
         _photoMatched: hasPhoto,
         _photoKey: hasPhoto ? matchValue : null,
+        _photoPath: hasPhoto && imagePaths ? imagePaths[matchKey] : null,
       };
     });
 
@@ -250,32 +266,46 @@ app.post('/api/ppt/generate', async (req, res) => {
         align: 'center',
       });
 
-      // Left side - Photo placeholder (2.2 x 2.8 inches)
-      const hasPhoto = row._photoMatched === true;
+      // Left side - Photo area (2.2 x 2.8 inches)
       const photoX = 0.5;
       const photoY = 1.2;
       const photoW = 2.2;
       const photoH = 2.8;
 
-      if (hasPhoto) {
-        // Add a placeholder box for the photo
-        slide.addShape(pptx.ShapeType.rect, {
-          x: photoX,
-          y: photoY,
-          w: photoW,
-          h: photoH,
-          fill: { color: 'e2e8f0' },
-          line: { color: 'cbd5e0', width: 1 },
-        });
-        slide.addText('[Photo]', {
-          x: photoX,
-          y: photoY + photoH / 2 - 0.3,
-          w: photoW,
-          h: 0.6,
-          fontSize: 14,
-          color: 'a0aec0',
-          align: 'center',
-        });
+      const hasPhoto = row._photoMatched === true;
+      const photoPath = row._photoPath as string | null;
+
+      if (hasPhoto && photoPath && fs.existsSync(photoPath)) {
+        // Add actual photo using slide.addImage() with file path
+        try {
+          slide.addImage({
+            x: photoX,
+            y: photoY,
+            w: photoW,
+            h: photoH,
+            path: photoPath,
+          });
+        } catch (imgError) {
+          // Fallback to placeholder if image fails to load
+          console.error(`Failed to load image: ${photoPath}`, imgError);
+          slide.addShape(pptx.ShapeType.rect, {
+            x: photoX,
+            y: photoY,
+            w: photoW,
+            h: photoH,
+            fill: { color: 'f7fafc' },
+            line: { color: 'e2e8f0', width: 1, dashType: 'dash' },
+          });
+          slide.addText('No Photo Available', {
+            x: photoX,
+            y: photoY + photoH / 2 - 0.3,
+            w: photoW,
+            h: 0.6,
+            fontSize: 12,
+            color: 'a0aec0',
+            align: 'center',
+          });
+        }
       } else {
         // No photo available box
         slide.addShape(pptx.ShapeType.rect, {
