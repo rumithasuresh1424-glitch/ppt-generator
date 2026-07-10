@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
-import { Upload, Search, X, FileSpreadsheet } from 'lucide-react';
+import { Upload, Search, X, FileSpreadsheet, Archive } from 'lucide-react';
 import { uploadExcel, ExcelData } from '../services/api';
 import PreviewTable from '../components/PreviewTable';
 
@@ -10,6 +10,7 @@ export default function GeneratePPT() {
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedColumn, setSelectedColumn] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = async (file: File | null) => {
@@ -39,6 +40,7 @@ export default function GeneratePPT() {
       const data = await uploadExcel(file);
       if (data.success) {
         setExcelData(data);
+        setSelectedColumn('');
         setError(null);
       } else {
         setError(data.error || 'Failed to parse Excel file');
@@ -79,10 +81,13 @@ export default function GeneratePPT() {
     setExcelData(null);
     setError(null);
     setSearchQuery('');
+    setSelectedColumn('');
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
   };
+
+  const canGenerate = excelData && selectedColumn;
 
   return (
     <div className="container mx-auto px-4 py-12">
@@ -90,11 +95,12 @@ export default function GeneratePPT() {
         <div className="text-center">
           <h1 className="text-3xl font-bold mb-2">Generate PowerPoint</h1>
           <p className="text-muted-foreground">
-            Upload your Excel file to preview employee data
+            Upload your Excel file and ZIP of photos to generate employee presentations
           </p>
         </div>
 
         <div className="space-y-6">
+          {/* Upload Excel Section */}
           <div className="border rounded-lg p-6">
             <h2 className="text-lg font-medium mb-4">Upload Excel</h2>
             {!excelFile ? (
@@ -150,12 +156,14 @@ export default function GeneratePPT() {
             )}
           </div>
 
+          {/* Error Display */}
           {error && (
             <div className="p-4 bg-destructive/10 border border-destructive/20 rounded-lg text-destructive text-sm">
               {error}
             </div>
           )}
 
+          {/* File Info & Preview - shown only after Excel upload */}
           {excelData && (
             <>
               <div className="border rounded-lg p-6">
@@ -196,26 +204,61 @@ export default function GeneratePPT() {
                   searchQuery={searchQuery}
                 />
               </div>
-
-              <div className="border rounded-lg p-6">
-                <h2 className="text-lg font-medium mb-4">Match Photos Using</h2>
-                <select className="w-full h-10 px-3 py-2 border rounded-md bg-background text-sm">
-                  <option value="">Select column...</option>
-                  {excelData.columns.map((col) => (
-                    <option key={col} value={col}>
-                      {col}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <button
-                disabled
-                className="w-full bg-primary text-primary-foreground px-6 py-3 rounded-lg font-medium opacity-50 cursor-not-allowed"
-              >
-                Generate PowerPoint
-              </button>
             </>
+          )}
+
+          {/* Upload ZIP Section - Always visible, disabled */}
+          <div className="border rounded-lg p-6 opacity-60">
+            <h2 className="text-lg font-medium mb-4">Upload ZIP</h2>
+            <div className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-muted-foreground/25 rounded-lg cursor-not-allowed">
+              <Archive className="h-8 w-8 mb-2 text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">Choose ZIP</p>
+              <p className="text-xs text-muted-foreground mt-2">Available in the next phase</p>
+            </div>
+          </div>
+
+          {/* Match Photos Using Section - Always visible */}
+          <div className="border rounded-lg p-6">
+            <h2 className="text-lg font-medium mb-4">Match Photos Using</h2>
+            <select
+              value={selectedColumn}
+              onChange={(e) => setSelectedColumn(e.target.value)}
+              disabled={!excelData}
+              className="w-full h-10 px-3 py-2 border rounded-md bg-background text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <option value="">Select column...</option>
+              {excelData?.columns.map((col) => (
+                <option key={col} value={col}>
+                  {col}
+                </option>
+              ))}
+            </select>
+            {excelData && (
+              <p className="text-xs text-muted-foreground mt-2">
+                {excelData.columns.length > 0
+                  ? `${excelData.columns.length} columns available`
+                  : 'Upload an Excel file to see columns'}
+              </p>
+            )}
+          </div>
+
+          {/* Generate PowerPoint Button */}
+          <button
+            disabled={!canGenerate}
+            className={`w-full px-6 py-3 rounded-lg font-medium transition-colors ${
+              canGenerate
+                ? 'bg-primary text-primary-foreground hover:bg-primary/90 cursor-pointer'
+                : 'bg-muted text-muted-foreground opacity-50 cursor-not-allowed'
+            }`}
+          >
+            {canGenerate ? 'Generate PowerPoint' : 'Generate PowerPoint'}
+          </button>
+          {!canGenerate && (
+            <p className="text-xs text-muted-foreground text-center -mt-4">
+              {!excelData
+                ? 'Upload an Excel file to continue'
+                : 'Select a column to match photos'}
+            </p>
           )}
         </div>
       </div>
