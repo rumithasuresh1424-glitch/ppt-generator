@@ -207,7 +207,9 @@ export default function GeneratePPT() {
 
       if (result.success) {
         setGenerateSuccess(true);
-        setDownloadUrl(result.downloadUrl);
+        // Use full backend URL for download (backend runs on port 5000)
+        const backendUrl = 'http://localhost:5000';
+        setDownloadUrl(`${backendUrl}${result.downloadUrl}`);
         setError(null);
       } else {
         setError(result.error || 'Failed to generate PowerPoint');
@@ -221,9 +223,23 @@ export default function GeneratePPT() {
     }
   };
 
-  const handleDownload = () => {
+  const handleDownload = async () => {
     if (!downloadUrl) return;
-    window.open(downloadUrl, '_blank');
+
+    try {
+      const response = await fetch(downloadUrl);
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = downloadUrl.split('/').pop() || 'Employee_Presentation.pptx';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Download failed:', err);
+    }
   };
 
   const canGenerate = excelData && zipFile && selectedColumn && matchedData.length > 0;
